@@ -1,0 +1,17 @@
+# Run the application locally:  docker compose up --build
+services:
+  web:
+    build:
+      context: .
+      target: runtime
+    image: aceest-fitness:latest
+    ports:
+      - "5000:5000"
+    environment:
+      SECRET_KEY: change-me-in-production
+      ADMIN_PASSWORD: change-me-too
+    volumes:
+      - aceest_data:/app/instance
+    restart: unless-stopped
+volumes:
+  aceest_data:
