@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{{ s.client.name }} - ACEest{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('index') }}">&larr; All clients</a></p>
+<h1>{{ s.client.name }}</h1>
+
+<section class="metrics">
+  <div><b>{{ s.client.calories or '-' }}</b><small>kcal / day</small></div>
+  <div><b>{{ s.bmi.value if s.bmi else '-' }}</b><small>BMI {{ '(' ~ s.bmi.category ~ ')' if s.bmi else '' }}</small></div>
+  <div><b>{{ s.adherence.average if s.adherence.average is not none else '-' }}</b><small>Avg adherence %</small></div>
+  <div><b>{{ s.membership.status }}</b><small>{{ s.membership.days_remaining ~ ' days left' if s.membership.days_remaining is not none else 'Membership' }}</small></div>
+</section>
+
+{% if s.bmi %}<p class="note">Risk note: {{ s.bmi.risk }}</p>{% endif %}
+
+<div class="grid">
+  <section class="card">
+    <h2>Program</h2>
+    {% if program %}
+      <h3>{{ program.name }}</h3>
+      <ul>{% for w in program.workout %}<li>{{ w }}</li>{% endfor %}</ul>
+      <h4>Nutrition</h4>
+      <ul>{% for d in program.diet %}<li>{{ d }}</li>{% endfor %}</ul>
+    {% else %}<p class="muted">No program assigned.</p>{% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Weekly adherence</h2>
+    {% if progress %}
+      {% for p in progress %}
+        <div class="bar-row"><span>{{ p.week }}</span>
+          <div class="bar"><i style="width: {{ p.adherence }}%"></i></div><b>{{ p.adherence }}%</b></div>
+      {% endfor %}
+    {% else %}<p class="muted">No progress logged. POST to /api/clients/{{ s.client.id }}/progress</p>{% endif %}
+  </section>
+</div>
+
+<section class="card">
+  <h2>Workout history ({{ s.workouts_logged }})</h2>
+  {% if workouts %}
+  <table>
+    <thead><tr><th>Date</th><th>Type</th><th>Duration</th><th>Notes</th></tr></thead>
+    <tbody>{% for w in workouts %}
+      <tr><td>{{ w.date }}</td><td>{{ w.workout_type }}</td><td>{{ w.duration_min }} min</td><td>{{ w.notes }}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  {% else %}<p class="muted">No workouts logged.</p>{% endif %}
+</section>
+{% endblock %}
