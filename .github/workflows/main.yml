@@ -1,0 +1,124 @@
+# ---------------------------------------------------------------------------
+# ACEest Fitness & Gym - CI/CD pipeline
+# Triggered on every push and pull_request.
+#   1. build-lint   : install deps, byte-compile every module, flake8
+#   2. docker-build : build the Docker image (test + runtime targets)
+#   3. docker-test  : run the Pytest suite INSIDE the container, smoke-test
+#                     the runtime image, and publish the test report
+# ---------------------------------------------------------------------------
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  IMAGE_NAME: aceest-fitness
+
+jobs:
+  build-lint:
+    name: Build & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Compile (syntax check)
+        run: python -m compileall -q app.py aceest tests
+
+      - name: Lint with flake8
+        run: flake8 app.py aceest tests --count --show-source --statistics
+
+      - name: Import check (app factory boots)
+        run: python -c "from app import create_app; create_app({'DATABASE':'/tmp/ci.db'}); print('app OK')"
+
+  docker-build:
+    name: Docker Image Assembly
+    runs-on: ubuntu-latest
+    needs: build-lint
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build test image
+        run: docker build --target test -t $IMAGE_NAME:test .
+
+      - name: Build runtime image
+        run: |
+          docker build --target runtime \
+            -t $IMAGE_NAME:${{ github.sha }} -t $IMAGE_NAME:latest .
+          docker image ls $IMAGE_NAME
+
+      - name: Save images for the test job
+        run: docker save $IMAGE_NAME:test $IMAGE_NAME:latest | gzip > images.tar.gz
+
+      - name: Upload images
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-images
+          path: images.tar.gz
+          retention-days: 1
+
+  docker-test:
+    name: Automated Testing (in container)
+    runs-on: ubuntu-latest
+    needs: docker-build
+    steps:
+      - name: Download images
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-images
+
+      - name: Load images
+        run: gunzip -c images.tar.gz | docker load
+
+      - name: Run Pytest inside the container
+        run: |
+          mkdir -p reports && chmod 777 reports
+          docker run --rm -v "$PWD/reports:/app/reports" $IMAGE_NAME:test \
+            pytest -v --junitxml=reports/junit.xml \
+                   --cov=app --cov=aceest --cov-report=term-missing \
+                   --cov-report=xml:reports/coverage.xml --cov-fail-under=90
+
+      - name: Smoke-test runtime container
+        run: |
+          docker run -d --name aceest -p 5000:5000 $IMAGE_NAME:latest
+          for i in $(seq 1 20); do
+            if curl -fs http://localhost:5000/health; then echo; break; fi
+            sleep 1
+          done
+          curl -fs http://localhost:5000/health
+          curl -fs http://localhost:5000/api/programs > /dev/null
+          test "$(docker exec aceest whoami)" = "aceest"   # must not run as root
+          docker logs aceest
+          docker rm -f aceest
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: reports/
