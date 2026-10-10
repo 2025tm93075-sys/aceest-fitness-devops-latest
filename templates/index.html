@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="metrics">
+  <div><b>{{ metrics.capacity_users }}</b><small>Capacity (users)</small></div>
+  <div><b>{{ "{:,}".format(metrics.area_sq_ft) }}</b><small>Area (sq ft)</small></div>
+  <div><b>{{ metrics.break_even_members }}</b><small>Break-even members</small></div>
+  <div><b>{{ clients|length }}</b><small>Clients on file</small></div>
+</section>
+
+<div class="grid">
+  <section class="card">
+    <h2>Add client</h2>
+    <form method="post" action="{{ url_for('create_client_form') }}" class="form">
+      <label>Name <input name="name" required></label>
+      <label>Age <input name="age" type="number" min="1"></label>
+      <label>Height (cm) <input name="height" type="number" step="0.1" min="1"></label>
+      <label>Weight (kg) <input name="weight" type="number" step="0.1" min="1"></label>
+      <label>Program
+        <select name="program">
+          <option value="">-- select --</option>
+          {% for pid, p in programs.items() %}<option value="{{ pid }}">{{ p.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Membership end <input name="membership_end" type="date"></label>
+      <button type="submit">Save client</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Clients</h2>
+    {% if clients %}
+    <table>
+      <thead><tr><th>Name</th><th>Program</th><th>kcal/day</th><th>Membership end</th></tr></thead>
+      <tbody>
+      {% for c in clients %}
+        <tr>
+          <td><a href="{{ url_for('client_page', client_id=c.id) }}">{{ c.name }}</a></td>
+          <td>{{ programs[c.program].name if c.program in programs else '-' }}</td>
+          <td>{{ c.calories or '-' }}</td>
+          <td>{{ c.membership_end or '-' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="muted">No clients yet. Add one on the left.</p>{% endif %}
+  </section>
+</div>
+
+<h2 class="section">Programs</h2>
+<div class="programs">
+  {% for pid, p in programs.items() %}
+  <article class="card program">
+    <h3>{{ p.name }}</h3>
+    <p class="muted">{{ p.description }} &middot; factor {{ p.calorie_factor }} kcal/kg</p>
+    <h4>Workout</h4><ul>{% for w in p.workout %}<li>{{ w }}</li>{% endfor %}</ul>
+    <h4>Nutrition</h4><ul>{% for d in p.diet %}<li>{{ d }}</li>{% endfor %}</ul>
+  </article>
+  {% endfor %}
+</div>
+{% endblock %}
