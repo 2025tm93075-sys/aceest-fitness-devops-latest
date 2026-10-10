@@ -95,15 +95,12 @@ def init_db(app: Flask) -> None:
     conn = sqlite3.connect(path)
     try:
         conn.executescript(SCHEMA)
-        exists = conn.execute(
-            "SELECT 1 FROM users WHERE username = ?", (app.config["ADMIN_USER"],)
-        ).fetchone()
-        if not exists:
-            conn.execute(
-                "INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'Admin')",
-                (app.config["ADMIN_USER"],
-                 generate_password_hash(app.config["ADMIN_PASSWORD"])),
-            )
+        # OR IGNORE keeps this safe when several gunicorn workers boot at once
+        conn.execute(
+            "INSERT OR IGNORE INTO users (username, password_hash, role) "
+            "VALUES (?, ?, 'Admin')",
+            (app.config["ADMIN_USER"], generate_password_hash(app.config["ADMIN_PASSWORD"])),
+        )
         conn.commit()
     finally:
         conn.close()
