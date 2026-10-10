@@ -1,0 +1,5 @@
+# Test & lint tooling (used by CI, Jenkins and the Docker "test" stage)
+-r requirements.txt
+pytest==8.3.5
+pytest-cov==6.1.1
+flake8==7.2.0
