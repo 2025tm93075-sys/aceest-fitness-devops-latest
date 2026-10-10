@@ -1,0 +1,21 @@
+# Keep the build context small and secrets-free
+.git
+.github
+.gitignore
+.venv
+venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.coverage
+coverage.xml
+htmlcov
+reports
+instance
+*.db
+legacy
+jenkins
+docs
+Jenkinsfile
+docker-compose.yml
+*.md
