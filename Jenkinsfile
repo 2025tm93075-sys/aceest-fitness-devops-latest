@@ -41,7 +41,7 @@ pipeline {
 
     environment {
         // >>> Change this to your Docker Hub username (the only edit needed) <<<
-        DOCKERHUB_USER = 'your-dockerhub-username'
+        DOCKERHUB_USER = 'omkarbandgar512'
         IMAGE_REPO     = "docker.io/${DOCKERHUB_USER}/aceest-fitness"
         TEST_REPO      = "docker.io/${DOCKERHUB_USER}/aceest-fitness-test"
         STABLE_TAG     = 'v1.1.0'            // baseline used when the cluster is bootstrapped
