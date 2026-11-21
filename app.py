@@ -258,6 +258,33 @@ def _register_routes(app: Flask) -> None:  # noqa: C901 - flat route table
                                     _number(data, "height", required=True))
         return jsonify(bmi=bmi, **fitness.bmi_category(bmi))
 
+    @app.post("/api/calculate/one-rep-max")
+    def calc_one_rep_max():
+        data = _json_body()
+        weight = _number(data, "weight", required=True)
+        reps = _number(data, "reps", int, required=True)
+        formula = str(data.get("formula", "epley")).lower()
+        one_rm = fitness.one_rep_max(weight, reps, formula)
+        return jsonify(formula=formula, weight=weight, reps=reps, one_rep_max=one_rm,
+                       zones=fitness.training_zones(one_rm))
+
+    @app.get("/tools")
+    def tools():
+        """Server-rendered calculators (no JavaScript needed)."""
+        result, error = None, None
+        if request.args.get("weight") and request.args.get("reps"):
+            try:
+                weight = _number(request.args, "weight", required=True)
+                reps = _number(request.args, "reps", int, required=True)
+                formula = request.args.get("formula", "epley")
+                one_rm = fitness.one_rep_max(weight, reps, formula)
+                result = {"weight": weight, "reps": reps, "formula": formula,
+                          "one_rep_max": one_rm, "zones": fitness.training_zones(one_rm)}
+            except ValidationError as err:
+                error = str(err)
+        return render_template("tools.html", result=result, error=error,
+                               formulas=fitness.ONE_REP_MAX_FORMULAS, version=__version__)
+
     # ---------- Auth ----------
     @app.post("/api/auth/login")
     def login():

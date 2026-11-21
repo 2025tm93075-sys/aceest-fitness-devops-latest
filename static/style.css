@@ -5,7 +5,9 @@ a { color: var(--gold); }
 .topbar { background:var(--gold); color:#000; padding:14px 24px; display:flex; justify-content:space-between; align-items:center; }
 .brand { color:#000; text-decoration:none; font-weight:800; font-size:22px; letter-spacing:.5px; }
 .brand span { font-weight:400; }
-.ver { font-family: monospace; }
+.ver { font-family: monospace; font-size: 12px; }
+.nav { display:flex; gap:18px; margin-left:auto; margin-right:24px; }
+.nav a { color:#000; font-weight:600; text-decoration:none; }
 main { max-width:1150px; margin:0 auto; padding:24px 16px; }
 h1, h2, h3 { margin: 0 0 12px; }
 h2 { color: var(--gold); font-size: 18px; }
