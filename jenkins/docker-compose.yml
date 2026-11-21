@@ -1,15 +1,55 @@
-# Local Jenkins for the BUILD phase:  docker compose -f jenkins/docker-compose.yml up -d
-# Then open http://localhost:8080 (initial password: see README).
+# Build server + code-quality server for the ACEest pipeline.
+#   1. minikube start            (creates the "minikube" Docker network)
+#   2. docker compose -f jenkins/docker-compose.yml up -d --build
+#   Jenkins   -> http://localhost:8080
+#   SonarQube -> http://localhost:9000  (admin/admin on first login)
+# Linux hosts: sudo sysctl -w vm.max_map_count=524288  (needed by SonarQube)
 services:
   jenkins:
     build: .
     container_name: aceest-jenkins
-    user: root            # needed to use the host Docker socket in a lab setup
+    user: root              # lab setup: lets Jenkins use the host Docker socket
     ports:
       - "8080:8080"
       - "50000:50000"
     volumes:
       - jenkins_home:/var/jenkins_home
       - /var/run/docker.sock:/var/run/docker.sock
+    networks: [ci, minikube]
+
+  sonarqube:
+    image: sonarqube:community
+    container_name: aceest-sonarqube
+    depends_on: [sonar-db]
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://sonar-db:5432/sonar
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: sonar
+    ports:
+      - "9000:9000"
+    volumes:
+      - sonar_data:/opt/sonarqube/data
+      - sonar_extensions:/opt/sonarqube/extensions
+    networks: [ci]
+
+  sonar-db:
+    image: postgres:16-alpine
+    container_name: aceest-sonar-db
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: sonar
+      POSTGRES_DB: sonar
+    volumes:
+      - sonar_db:/var/lib/postgresql/data
+    networks: [ci]
+
+networks:
+  ci: {}
+  minikube:
+    external: true          # created by `minikube start --driver=docker`
+
 volumes:
   jenkins_home:
+  sonar_data:
+  sonar_extensions:
+  sonar_db:
