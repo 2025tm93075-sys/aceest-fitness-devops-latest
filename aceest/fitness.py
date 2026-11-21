@@ -200,3 +200,38 @@ def total_training_volume(exercises: list[dict]) -> float:
     """Sum of sets x reps x weight across a workout's exercises."""
     return float(sum(e.get("sets", 0) * e.get("reps", 0) * e.get("weight", 0.0)
                      for e in exercises))
+
+
+# --------------------------------------------------------------------------- #
+# One-rep max estimator (v1.2.0)
+# --------------------------------------------------------------------------- #
+ONE_REP_MAX_FORMULAS = ("epley", "brzycki")
+# Percentages of 1RM used to suggest working weights for common rep targets
+TRAINING_ZONES = {"strength (3-5 reps)": 0.875, "hypertrophy (8-12 reps)": 0.725,
+                  "endurance (15+ reps)": 0.6}
+
+
+def one_rep_max(weight_kg: float, reps: int, formula: str = "epley") -> float:
+    """
+    Estimate a one-rep max from a sub-maximal set.
+
+    Epley:   1RM = w x (1 + reps / 30)
+    Brzycki: 1RM = w x 36 / (37 - reps)
+    Estimates are only reliable up to about 12 reps, so more are rejected.
+    """
+    if weight_kg is None or weight_kg <= 0:
+        raise ValidationError("Weight must be a positive number")
+    if not isinstance(reps, int) or isinstance(reps, bool) or not 1 <= reps <= 12:
+        raise ValidationError("Reps must be a whole number between 1 and 12")
+    if formula not in ONE_REP_MAX_FORMULAS:
+        raise ValidationError(f"Formula must be one of {list(ONE_REP_MAX_FORMULAS)}")
+    if reps == 1:
+        return round(float(weight_kg), 1)
+    if formula == "epley":
+        return round(weight_kg * (1 + reps / 30), 1)
+    return round(weight_kg * 36 / (37 - reps), 1)
+
+
+def training_zones(one_rm: float) -> dict:
+    """Suggested working weights (rounded to 2.5 kg plates) for each goal."""
+    return {zone: round(one_rm * pct / 2.5) * 2.5 for zone, pct in TRAINING_ZONES.items()}
