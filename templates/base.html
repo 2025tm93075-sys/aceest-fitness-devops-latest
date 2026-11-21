@@ -9,6 +9,7 @@
 <body>
   <header class="topbar">
     <a href="{{ url_for('index') }}" class="brand">ACEest <span>Functional Fitness</span></a>
+    <nav class="nav"><a href="{{ url_for('index') }}">Dashboard</a><a href="{{ url_for('tools') }}">Tools</a></nav>
     <span class="ver" title="Served by pod {{ deploy.pod }}">v{{ deploy.version }} &middot; {{ deploy.track }} &middot; {{ deploy.pod }}</span>
   </header>
   <main>

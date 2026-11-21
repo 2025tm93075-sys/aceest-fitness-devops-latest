@@ -266,3 +266,37 @@ def test_form_create_client_errors(client):
     client.post("/clients", data={"name": "Meera"})
     resp = client.post("/clients", data={"name": "Meera"}, follow_redirects=True)
     assert "already exists" in resp.get_data(as_text=True)
+
+
+# ---------- One-rep max (v1.2.0) ----------
+def test_one_rep_max_api(client):
+    resp = client.post("/api/calculate/one-rep-max",
+                       json={"weight": 100, "reps": 5, "formula": "Brzycki"})
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["one_rep_max"] == 112.5 and data["formula"] == "brzycki"
+    assert len(data["zones"]) == 3
+
+
+def test_one_rep_max_api_defaults_to_epley(client):
+    data = client.post("/api/calculate/one-rep-max", json={"weight": 60, "reps": 3}).get_json()
+    assert data["formula"] == "epley" and data["one_rep_max"] == 66.0
+
+
+@pytest.mark.parametrize("payload", [
+    {"reps": 5}, {"weight": 100}, {"weight": 100, "reps": 20},
+    {"weight": 100, "reps": "five"}, {"weight": 100, "reps": 5, "formula": "x"},
+])
+def test_one_rep_max_api_validation(client, payload):
+    assert client.post("/api/calculate/one-rep-max", json=payload).status_code == 400
+
+
+def test_tools_page(client):
+    assert "One-rep max estimator" in client.get("/tools").get_data(as_text=True)
+    body = client.get("/tools?weight=100&reps=5&formula=epley").get_data(as_text=True)
+    assert "116.7 kg" in body and "Hypertrophy" in body
+
+
+def test_tools_page_shows_error(client):
+    body = client.get("/tools?weight=100&reps=30").get_data(as_text=True)
+    assert "between 1 and 12" in body
