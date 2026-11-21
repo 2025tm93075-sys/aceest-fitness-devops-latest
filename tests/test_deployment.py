@@ -84,3 +84,18 @@ def test_entrypoint_exposes_wsgi_app(monkeypatch, tmp_path):
     module = importlib.import_module("ACEest_Fitness")
     module = importlib.reload(module)
     assert module.app.test_client().get("/health").status_code == 200
+
+
+# ---------- A/B variant (v1.2.0) ----------
+def test_variant_a_has_no_promo(client, monkeypatch):
+    monkeypatch.setenv("UI_VARIANT", "A")
+    body = client.get("/").get_data(as_text=True)
+    assert 'data-variant="B"' not in body
+
+
+def test_variant_b_shows_promo(client, monkeypatch):
+    monkeypatch.setenv("UI_VARIANT", "B")
+    resp = client.get("/")
+    body = resp.get_data(as_text=True)
+    assert 'data-variant="B"' in body and "ref=variant-b" in body
+    assert resp.headers["X-UI-Variant"] == "B"
