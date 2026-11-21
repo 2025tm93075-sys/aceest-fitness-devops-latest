@@ -2,11 +2,11 @@
 ACEest Fitness & Gym - Flask web application.
 
 Author : Bandgar Omkar Sudhakar Sheetal (2025TM93075)
-Course : Introduction to DevOps (CSIZG514/SEZG514) - Assignment 1
+Course : Introduction to DevOps (CSIZG514/SEZG514) - Assignments 1 & 2
 
 Run locally:
-    python app.py                       # dev server on http://127.0.0.1:5000
-    gunicorn -b 0.0.0.0:5000 "app:create_app()"   # production-style
+    python ACEest_Fitness.py                       # dev server on http://127.0.0.1:5000
+    gunicorn -b 0.0.0.0:5000 ACEest_Fitness:app    # production-style
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from werkzeug.security import check_password_hash
 from aceest import __version__
 from aceest import fitness
 from aceest.database import get_db, init_db
+from aceest.deployment import deployment_info, fault_mode
 from aceest.fitness import ValidationError
 
 CLIENT_FIELDS = ("name", "age", "height", "weight", "program",
@@ -148,7 +149,7 @@ def _register_error_handlers(app: Flask) -> None:
 
     @app.errorhandler(HTTPException)
     def handle_http(err):
-        if request.path.startswith("/api/") or request.path == "/health":
+        if request.path.startswith("/api/") or request.path in ("/health", "/ready"):
             return jsonify(error=err.description), err.code
         return err
 
@@ -158,15 +159,40 @@ def _register_error_handlers(app: Flask) -> None:
 # --------------------------------------------------------------------------- #
 def _register_routes(app: Flask) -> None:  # noqa: C901 - flat route table
 
+    # ---------- Deployment metadata ----------
+    @app.context_processor
+    def inject_deployment():
+        return {"deploy": deployment_info()}
+
+    @app.after_request
+    def add_deployment_headers(response):
+        info = deployment_info()
+        response.headers["X-App-Version"] = info["version"]
+        response.headers["X-Deployment-Track"] = info["track"]
+        response.headers["X-UI-Variant"] = info["variant"]
+        response.headers["X-Pod"] = info["pod"]
+        return response
+
     # ---------- Ops ----------
     @app.get("/health")
     def health():
+        """Liveness: the process is up and the database answers."""
+        if fault_mode() == "health":
+            return jsonify(status="fault-injected", version=__version__), 503
         get_db().execute("SELECT 1")
         return jsonify(status="ok", version=__version__)
 
+    @app.get("/ready")
+    def ready():
+        """Readiness: safe to receive traffic (used by Kubernetes probes)."""
+        if fault_mode() == "health":
+            return jsonify(ready=False, reason="fault-injected"), 503
+        get_db().execute("SELECT COUNT(*) FROM users")
+        return jsonify(ready=True, **deployment_info())
+
     @app.get("/api/version")
     def version():
-        return jsonify(app="ACEest Fitness & Gym", version=__version__)
+        return jsonify(app="ACEest Fitness & Gym", **deployment_info())
 
     # ---------- Web UI ----------
     @app.get("/")
