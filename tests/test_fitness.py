@@ -135,3 +135,32 @@ def test_total_training_volume():
 
 def test_total_training_volume_empty():
     assert fitness.total_training_volume([]) == 0.0
+
+
+# ---------- One-rep max (v1.2.0) ----------
+@pytest.mark.parametrize("weight, reps, formula, expected", [
+    (100, 1, "epley", 100.0),
+    (100, 5, "epley", 116.7),
+    (100, 10, "epley", 133.3),
+    (100, 5, "brzycki", 112.5),
+    (80, 8, "brzycki", 99.3),
+])
+def test_one_rep_max(weight, reps, formula, expected):
+    assert fitness.one_rep_max(weight, reps, formula) == expected
+
+
+@pytest.mark.parametrize("weight, reps, formula", [
+    (0, 5, "epley"), (-10, 5, "epley"), (None, 5, "epley"),
+    (100, 0, "epley"), (100, 13, "epley"), (100, 5.5, "epley"), (100, True, "epley"),
+    (100, 5, "lombardi"),
+])
+def test_one_rep_max_rejects_bad_input(weight, reps, formula):
+    with pytest.raises(ValidationError):
+        fitness.one_rep_max(weight, reps, formula)
+
+
+def test_training_zones_round_to_plates():
+    zones = fitness.training_zones(120)
+    assert zones == {"strength (3-5 reps)": 105.0, "hypertrophy (8-12 reps)": 87.5,
+                     "endurance (15+ reps)": 72.5}
+    assert all(kg % 2.5 == 0 for kg in zones.values())

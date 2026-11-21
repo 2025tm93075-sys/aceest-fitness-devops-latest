@@ -1,0 +1,330 @@
+# ---------------------------------------------------------------------------
+# 4. A/B TESTING
+# Same release, two UI variants. Variant B shows the one-rep max promo.
+# Users are split 50/50 by weight; a cookie or header pins a user to B:
+#   cookie  ab_variant=always   -> B      ab_variant=never -> A
+#   header  X-Variant: B        -> B
+# Compare variants with: kubectl -n aceest logs -l strategy=ab-test | grep ref=variant-b
+# Change split: scripts/ab-test.sh split <percent-to-B>
+# Rollback / end test: scripts/ab-test.sh end   (100% to variant A)
+# Access   : http://ab.aceest.local
+# ---------------------------------------------------------------------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aceest-variant-a
+  namespace: aceest
+  labels:
+    app.kubernetes.io/name: aceest-fitness
+    app.kubernetes.io/part-of: aceest
+    strategy: ab-test
+    track: variant-a
+    app: aceest-variant-a
+  annotations:
+    kubernetes.io/change-cause: initial deploy __NEW_TAG__
+spec:
+  replicas: 2
+  revisionHistoryLimit: 10
+  minReadySeconds: 5
+  progressDeadlineSeconds: 120
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: aceest-variant-a
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aceest-fitness
+        app.kubernetes.io/part-of: aceest
+        strategy: ab-test
+        track: variant-a
+        app: aceest-variant-a
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 20
+      containers:
+      - name: web
+        image: __IMAGE_REPO__:__NEW_TAG__
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 5000
+        env:
+        - name: DEPLOYMENT_TRACK
+          value: variant-a
+        - name: UI_VARIANT
+          value: A
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aceest-secrets
+              key: secret-key
+        - name: ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: aceest-secrets
+              key: admin-password
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          failureThreshold: 3
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - sleep
+              - '5'
+        resources:
+          requests:
+            cpu: 50m
+            memory: 96Mi
+          limits:
+            cpu: 250m
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: data
+          mountPath: /app/instance
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: data
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aceest-variant-b
+  namespace: aceest
+  labels:
+    app.kubernetes.io/name: aceest-fitness
+    app.kubernetes.io/part-of: aceest
+    strategy: ab-test
+    track: variant-b
+    app: aceest-variant-b
+  annotations:
+    kubernetes.io/change-cause: initial deploy __NEW_TAG__
+spec:
+  replicas: 2
+  revisionHistoryLimit: 10
+  minReadySeconds: 5
+  progressDeadlineSeconds: 120
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: aceest-variant-b
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aceest-fitness
+        app.kubernetes.io/part-of: aceest
+        strategy: ab-test
+        track: variant-b
+        app: aceest-variant-b
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 20
+      containers:
+      - name: web
+        image: __IMAGE_REPO__:__NEW_TAG__
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 5000
+        env:
+        - name: DEPLOYMENT_TRACK
+          value: variant-b
+        - name: UI_VARIANT
+          value: B
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aceest-secrets
+              key: secret-key
+        - name: ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: aceest-secrets
+              key: admin-password
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          failureThreshold: 3
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - sleep
+              - '5'
+        resources:
+          requests:
+            cpu: 50m
+            memory: 96Mi
+          limits:
+            cpu: 250m
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: data
+          mountPath: /app/instance
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: data
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aceest-variant-a
+  namespace: aceest
+  labels:
+    app.kubernetes.io/name: aceest-fitness
+    app.kubernetes.io/part-of: aceest
+    strategy: ab-test
+    track: variant-a
+spec:
+  selector:
+    app: aceest-variant-a
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aceest-variant-b
+  namespace: aceest
+  labels:
+    app.kubernetes.io/name: aceest-fitness
+    app.kubernetes.io/part-of: aceest
+    strategy: ab-test
+    track: variant-b
+spec:
+  selector:
+    app: aceest-variant-b
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aceest-ab-main
+  namespace: aceest
+  labels:
+    app.kubernetes.io/name: aceest-fitness
+    app.kubernetes.io/part-of: aceest
+    strategy: ab-test
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: '30'
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: ab.aceest.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: aceest-variant-a
+            port:
+              number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aceest-ab-variant-b
+  namespace: aceest
+  labels:
+    app.kubernetes.io/name: aceest-fitness
+    app.kubernetes.io/part-of: aceest
+    strategy: ab-test
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: '30'
+    nginx.ingress.kubernetes.io/canary: 'true'
+    nginx.ingress.kubernetes.io/canary-by-header: X-Variant
+    nginx.ingress.kubernetes.io/canary-by-header-value: B
+    nginx.ingress.kubernetes.io/canary-by-cookie: ab_variant
+    nginx.ingress.kubernetes.io/canary-weight: '50'
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: ab.aceest.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: aceest-variant-b
+            port:
+              number: 80

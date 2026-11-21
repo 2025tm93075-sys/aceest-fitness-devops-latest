@@ -1,0 +1,9 @@
+# Namespace for every ACEest deployment strategy.
+# The secret (aceest-secrets) is created by scripts/bootstrap.sh, never committed.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aceest
+  labels:
+    app.kubernetes.io/part-of: aceest

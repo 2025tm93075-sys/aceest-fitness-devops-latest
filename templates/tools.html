@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Tools - ACEest{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('index') }}">&larr; Dashboard</a></p>
+<h1>Strength tools</h1>
+<div class="grid">
+  <section class="card">
+    <h2>One-rep max estimator</h2>
+    <form method="get" action="{{ url_for('tools') }}" class="form">
+      <label>Weight lifted (kg) <input name="weight" type="number" step="0.5" min="1" required value="{{ result.weight if result else '' }}"></label>
+      <label>Reps completed (1-12) <input name="reps" type="number" min="1" max="12" required value="{{ result.reps if result else '' }}"></label>
+      <label>Formula
+        <select name="formula">
+          {% for f in formulas %}<option value="{{ f }}" {{ 'selected' if result and result.formula == f }}>{{ f|capitalize }}</option>{% endfor %}
+        </select>
+      </label>
+      <button type="submit">Estimate 1RM</button>
+    </form>
+    {% if error %}<p class="flash error">{{ error }}</p>{% endif %}
+  </section>
+  <section class="card">
+    <h2>Result</h2>
+    {% if result %}
+      <section class="metrics"><div><b>{{ result.one_rep_max }} kg</b><small>Estimated 1RM ({{ result.formula|capitalize }})</small></div></section>
+      <table>
+        <thead><tr><th>Training goal</th><th>Working weight</th></tr></thead>
+        <tbody>{% for zone, kg in result.zones.items() %}<tr><td>{{ zone|capitalize }}</td><td>{{ kg }} kg</td></tr>{% endfor %}</tbody>
+      </table>
+    {% else %}<p class="muted">Enter a set you completed to see your estimated max and suggested working weights.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

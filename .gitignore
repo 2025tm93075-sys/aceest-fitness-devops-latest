@@ -20,3 +20,8 @@ instance/
 .vscode/
 .idea/
 .DS_Store
+
+# Local secrets / build output
+jenkins/kubeconfig-*.yaml
+dist/
+.scannerwork/

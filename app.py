@@ -24,6 +24,7 @@ from aceest import __version__
 from aceest import fitness
 from aceest.database import get_db, init_db
 from aceest.deployment import deployment_info, fault_mode
+from aceest.instance_secrets import load_or_create
 from aceest.fitness import ValidationError
 
 CLIENT_FIELDS = ("name", "age", "height", "weight", "program",
@@ -36,19 +37,32 @@ CLIENT_FIELDS = ("name", "age", "height", "weight", "program",
 def create_app(test_config: dict | None = None) -> Flask:
     app = Flask(__name__)
     app.config.from_mapping(
-        SECRET_KEY=os.environ.get("SECRET_KEY", "dev-only-change-me"),
+        SECRET_KEY=os.environ.get("SECRET_KEY"),
         DATABASE=os.environ.get("DATABASE_PATH",
                                 os.path.join(app.instance_path, "aceest_fitness.db")),
         ADMIN_USER=os.environ.get("ADMIN_USER", "admin"),
-        ADMIN_PASSWORD=os.environ.get("ADMIN_PASSWORD", "admin"),
+        ADMIN_PASSWORD=os.environ.get("ADMIN_PASSWORD"),
     )
     if test_config:
         app.config.update(test_config)
+    _fill_missing_secrets(app)
 
     init_db(app)
     _register_error_handlers(app)
     _register_routes(app)
     return app
+
+
+def _fill_missing_secrets(app: Flask) -> None:
+    """Generate and persist secrets that were not provided (never hard-coded)."""
+    directory = os.path.dirname(os.path.abspath(app.config["DATABASE"]))
+    if not app.config.get("SECRET_KEY"):
+        app.config["SECRET_KEY"], _ = load_or_create(directory, ".secret_key")
+    if not app.config.get("ADMIN_PASSWORD"):
+        app.config["ADMIN_PASSWORD"], created = load_or_create(directory, ".admin_password", 12)
+        if created:
+            app.logger.warning("ADMIN_PASSWORD not set: generated one in %s",
+                               os.path.join(directory, ".admin_password"))
 
 
 # --------------------------------------------------------------------------- #
@@ -257,6 +271,33 @@ def _register_routes(app: Flask) -> None:  # noqa: C901 - flat route table
         bmi = fitness.calculate_bmi(_number(data, "weight", required=True),
                                     _number(data, "height", required=True))
         return jsonify(bmi=bmi, **fitness.bmi_category(bmi))
+
+    @app.post("/api/calculate/one-rep-max")
+    def calc_one_rep_max():
+        data = _json_body()
+        weight = _number(data, "weight", required=True)
+        reps = _number(data, "reps", int, required=True)
+        formula = str(data.get("formula", "epley")).lower()
+        one_rm = fitness.one_rep_max(weight, reps, formula)
+        return jsonify(formula=formula, weight=weight, reps=reps, one_rep_max=one_rm,
+                       zones=fitness.training_zones(one_rm))
+
+    @app.get("/tools")
+    def tools():
+        """Server-rendered calculators (no JavaScript needed)."""
+        result, error = None, None
+        if request.args.get("weight") and request.args.get("reps"):
+            try:
+                weight = _number(request.args, "weight", required=True)
+                reps = _number(request.args, "reps", int, required=True)
+                formula = request.args.get("formula", "epley")
+                one_rm = fitness.one_rep_max(weight, reps, formula)
+                result = {"weight": weight, "reps": reps, "formula": formula,
+                          "one_rep_max": one_rm, "zones": fitness.training_zones(one_rm)}
+            except ValidationError as err:
+                error = str(err)
+        return render_template("tools.html", result=result, error=error,
+                               formulas=fitness.ONE_REP_MAX_FORMULAS, version=__version__)
 
     # ---------- Auth ----------
     @app.post("/api/auth/login")
