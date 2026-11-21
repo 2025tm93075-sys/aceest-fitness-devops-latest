@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Build and push an image for every release tag (v1.0.0, v1.1.0, ...), so the
 # Docker Hub repository holds all versions of the application.
-# Usage: IMAGE_REPO=docker.io/<user>/aceest-fitness ./publish-all-versions.sh
+# Usage: ./publish-all-versions.sh   (IMAGE_REPO defaults to docker.io/omkarbandgar512/aceest-fitness)
 # (run `docker login` first)
 set -euo pipefail
-: "${IMAGE_REPO:?set IMAGE_REPO=docker.io/<user>/aceest-fitness}"
+IMAGE_REPO="${IMAGE_REPO:-docker.io/omkarbandgar512/aceest-fitness}"
 ROOT="$(git rev-parse --show-toplevel)"
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
 for tag in $(git -C "$ROOT" tag -l 'v*' --sort=v:refname); do

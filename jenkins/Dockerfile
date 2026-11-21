@@ -4,11 +4,13 @@ FROM jenkins/jenkins:lts-jdk17
 USER root
 # Lab image: apt packages follow the base image release, so they are not pinned.
 ARG KUBECTL_VERSION=v1.30.6
+# Set automatically by BuildKit: amd64 on Intel/AMD, arm64 on Apple Silicon
+ARG TARGETARCH=amd64
 # hadolint ignore=DL3008
 RUN apt-get update \
  && apt-get install -y --no-install-recommends python3 python3-venv python3-pip docker.io git curl \
  && rm -rf /var/lib/apt/lists/* \
- && curl -fsSLo /usr/local/bin/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
+ && curl -fsSLo /usr/local/bin/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl" \
  && chmod +x /usr/local/bin/kubectl
 USER jenkins
 COPY --chown=jenkins:jenkins plugins.txt /usr/share/jenkins/ref/plugins.txt
