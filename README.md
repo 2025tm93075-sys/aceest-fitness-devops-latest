@@ -47,7 +47,7 @@ version when a release fails.
 
 | Requirement | Where |
 |---|---|
-| Flask application (`ACEest_Fitness.py` and versions) | `ACEest_Fitness.py`, `app.py`, `aceest/`, `templates/`, `static/`; releases tagged `v1.0.0`, `v1.1.0`, `v1.2.0`; original scripts in `legacy/` |
+| Flask application (`ACEest_Fitness.py` and versions) | `ACEest_Fitness.py`, `app.py`, `aceest/`, `templates/`, `static/`; releases tagged `v1.0.0`, `v1.1.0`, `v1.2.0`, `v1.2.1`; original scripts in `legacy/` |
 | Git and GitHub: commits, branches, tags | `feature/*`, `infra/*`, `fix/*` → `develop` → `main`, annotated tags (see [section 14](#14-version-control-strategy)) |
 | Pytest unit tests and automation | `tests/` (unit and integration), `tests/smoke/` (post-deployment) |
 | Jenkins build server with SCM polling | `Jenkinsfile` (`pollSCM('H/2 * * * *')` plus GitHub webhook), `jenkins/` |
@@ -101,6 +101,7 @@ rolling and blue-green environments.
 | `v1.0.0` | Flask rewrite of the Tkinter app: clients, programs, calories, BMI, progress, workouts, metrics, auth | `aceest-fitness:v1.0.0` |
 | `v1.1.0` | Kubernetes-ready: `/ready` probe, deployment metadata (`X-App-Version`, `X-Deployment-Track`, `X-Pod` headers and page banner), fault injection for rollback drills, `ACEest_Fitness.py` entry point, OCI image labels | `aceest-fitness:v1.1.0` |
 | `v1.2.0` | One-rep max estimator (API and `/tools` page), variant B dashboard promo for A/B testing, generated secrets instead of hard-coded defaults, Kubernetes manifests, SonarQube and the CD pipeline | `aceest-fitness:v1.2.0` |
+| `v1.2.1` | Patch: 1RM form keeps the weight as typed, footer updated | `aceest-fitness:v1.2.1` |
 
 The version lives in `aceest/__init__.py`; Jenkins reads it to tag images and artifacts.
 
@@ -152,7 +153,7 @@ python ACEest_Fitness.py                               # http://127.0.0.1:5000
 ## 6. Tests
 
 ```bash
-pytest                                             # 134 pass; the 7 smoke tests skip without a URL
+pytest                                             # 136 pass; the 7 smoke tests skip without a URL
 pytest --cov=app --cov=aceest --cov-report=term    # about 99% coverage
 flake8 app.py ACEest_Fitness.py aceest tests
 
@@ -181,7 +182,7 @@ docker.io/<dockerhub-user>/aceest-fitness:latest
 docker.io/<dockerhub-user>/aceest-fitness-test:v1.2.0    # test image used by the smoke Job
 ```
 
-To publish **every** tagged version (v1.0.0, v1.1.0, v1.2.0) in one go:
+To publish **every** tagged version (v1.0.0 to v1.2.1) in one go:
 
 ```bash
 docker login
@@ -309,7 +310,7 @@ It gives fast feedback on branches, while Jenkins owns the release path.
 
 | Branch | Purpose | Examples |
 |---|---|---|
-| `main` | Released code, annotated tags | `v1.0.0`, `v1.1.0`, `v1.2.0` |
+| `main` | Released code, annotated tags | `v1.0.0`, `v1.1.0`, `v1.2.0`, `v1.2.1` |
 | `develop` | Integration | |
 | `feature/*` | Application features | `feature/k8s-ready-app`, `feature/one-rep-max`, `feature/ab-variant` |
 | `infra/*` | Pipeline and platform | `infra/kubernetes`, `infra/sonarqube-jenkins-cd` |
@@ -343,7 +344,7 @@ Every response carries `X-App-Version`, `X-Deployment-Track`, `X-UI-Variant` and
 ## 16. Submission checklist
 
 - [ ] Set `DOCKERHUB_USER` in `Jenkinsfile` and push to `main`
-- [ ] Run `publish-all-versions.sh` so Docker Hub has `v1.0.0`, `v1.1.0`, `v1.2.0`
+- [ ] Run `publish-all-versions.sh` so Docker Hub has `v1.0.0`, `v1.1.0`, `v1.2.0`, `v1.2.1`
 - [ ] Jenkins: green runs for recent commits (Stage View screenshot), artifacts archived
 - [ ] SonarQube: project dashboard showing the quality gate passed (screenshot or PDF export)
 - [ ] Cluster: `k8s/scripts/status.sh` output and the `traffic-check.sh` results for each strategy

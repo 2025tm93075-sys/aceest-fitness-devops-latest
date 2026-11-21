@@ -300,3 +300,12 @@ def test_tools_page(client):
 def test_tools_page_shows_error(client):
     body = client.get("/tools?weight=100&reps=30").get_data(as_text=True)
     assert "between 1 and 12" in body
+
+
+def test_tools_page_keeps_entered_weight_format(client):
+    body = client.get("/tools?weight=100&reps=5").get_data(as_text=True)
+    assert 'value="100"' in body and 'value="100.0"' not in body
+
+
+def test_footer_names_both_assignments(client):
+    assert "Assignments 1 &amp; 2" in client.get("/").get_data(as_text=True)
