@@ -8,8 +8,9 @@ services:
     ports:
       - "5000:5000"
     environment:
-      SECRET_KEY: change-me-in-production
-      ADMIN_PASSWORD: change-me-too
+      # Optional: leave unset and the app generates both into the data volume
+      SECRET_KEY: ${SECRET_KEY:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     volumes:
       - aceest_data:/app/instance
     restart: unless-stopped

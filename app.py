@@ -24,6 +24,7 @@ from aceest import __version__
 from aceest import fitness
 from aceest.database import get_db, init_db
 from aceest.deployment import deployment_info, fault_mode
+from aceest.instance_secrets import load_or_create
 from aceest.fitness import ValidationError
 
 CLIENT_FIELDS = ("name", "age", "height", "weight", "program",
@@ -36,19 +37,32 @@ CLIENT_FIELDS = ("name", "age", "height", "weight", "program",
 def create_app(test_config: dict | None = None) -> Flask:
     app = Flask(__name__)
     app.config.from_mapping(
-        SECRET_KEY=os.environ.get("SECRET_KEY", "dev-only-change-me"),
+        SECRET_KEY=os.environ.get("SECRET_KEY"),
         DATABASE=os.environ.get("DATABASE_PATH",
                                 os.path.join(app.instance_path, "aceest_fitness.db")),
         ADMIN_USER=os.environ.get("ADMIN_USER", "admin"),
-        ADMIN_PASSWORD=os.environ.get("ADMIN_PASSWORD", "admin"),
+        ADMIN_PASSWORD=os.environ.get("ADMIN_PASSWORD"),
     )
     if test_config:
         app.config.update(test_config)
+    _fill_missing_secrets(app)
 
     init_db(app)
     _register_error_handlers(app)
     _register_routes(app)
     return app
+
+
+def _fill_missing_secrets(app: Flask) -> None:
+    """Generate and persist secrets that were not provided (never hard-coded)."""
+    directory = os.path.dirname(os.path.abspath(app.config["DATABASE"]))
+    if not app.config.get("SECRET_KEY"):
+        app.config["SECRET_KEY"], _ = load_or_create(directory, ".secret_key")
+    if not app.config.get("ADMIN_PASSWORD"):
+        app.config["ADMIN_PASSWORD"], created = load_or_create(directory, ".admin_password", 12)
+        if created:
+            app.logger.warning("ADMIN_PASSWORD not set: generated one in %s",
+                               os.path.join(directory, ".admin_password"))
 
 
 # --------------------------------------------------------------------------- #
