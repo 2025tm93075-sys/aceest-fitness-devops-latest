@@ -9,7 +9,7 @@
 <body>
   <header class="topbar">
     <a href="{{ url_for('index') }}" class="brand">ACEest <span>Functional Fitness</span></a>
-    <span class="ver">v{{ version }}</span>
+    <span class="ver" title="Served by pod {{ deploy.pod }}">v{{ deploy.version }} &middot; {{ deploy.track }} &middot; {{ deploy.pod }}</span>
   </header>
   <main>
     {% with messages = get_flashed_messages(with_categories=true) %}

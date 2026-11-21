@@ -25,7 +25,7 @@ RUN pip install -r requirements.txt
 FROM builder AS test
 COPY requirements-dev.txt .
 RUN pip install -r requirements-dev.txt
-COPY pytest.ini .flake8 app.py ./
+COPY pytest.ini .flake8 app.py ACEest_Fitness.py ./
 COPY aceest/ aceest/
 COPY templates/ templates/
 COPY static/ static/
@@ -34,7 +34,14 @@ CMD ["pytest", "-v", "--cov=app", "--cov=aceest", "--cov-report=term-missing"]
 
 # ---------- runtime ----------
 FROM base AS runtime
+ARG APP_VERSION=dev
+ARG VCS_REF=unknown
+ARG BUILD_DATE=unknown
 LABEL org.opencontainers.image.title="aceest-fitness" \
+      org.opencontainers.image.version="${APP_VERSION}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.source="https://github.com/2025tm93075-sys/aceest-fitness-devops-latest" \
       org.opencontainers.image.description="ACEest Fitness & Gym Flask service" \
       org.opencontainers.image.authors="Bandgar Omkar Sudhakar Sheetal (2025TM93075)"
 
@@ -45,13 +52,14 @@ RUN groupadd --system --gid 10001 aceest \
  && chown aceest:aceest /app/instance
 
 COPY --from=builder /opt/venv /opt/venv
-COPY app.py ./
+COPY app.py ACEest_Fitness.py ./
 COPY aceest/ aceest/
 COPY templates/ templates/
 COPY static/ static/
 
 ENV DATABASE_PATH=/app/instance/aceest_fitness.db \
-    PORT=5000
+    PORT=5000 \
+    DEPLOYMENT_TRACK=docker
 USER 10001:10001
 EXPOSE 5000
 VOLUME ["/app/instance"]
@@ -59,4 +67,4 @@ VOLUME ["/app/instance"]
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=2)"]
 
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--access-logfile", "-", "app:create_app()"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--access-logfile", "-", "ACEest_Fitness:app"]

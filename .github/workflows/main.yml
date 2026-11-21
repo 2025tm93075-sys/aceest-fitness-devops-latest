@@ -47,13 +47,13 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Compile (syntax check)
-        run: python -m compileall -q app.py aceest tests
+        run: python -m compileall -q app.py ACEest_Fitness.py aceest tests
 
       - name: Lint with flake8
-        run: flake8 app.py aceest tests --count --show-source --statistics
+        run: flake8 app.py ACEest_Fitness.py aceest tests --count --show-source --statistics
 
       - name: Import check (app factory boots)
-        run: python -c "from app import create_app; create_app({'DATABASE':'/tmp/ci.db'}); print('app OK')"
+        run: DATABASE_PATH=/tmp/ci.db python -c "import ACEest_Fitness; print('app OK')"
 
   docker-build:
     name: Docker Image Assembly
