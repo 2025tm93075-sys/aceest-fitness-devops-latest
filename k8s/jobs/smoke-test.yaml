@@ -1,0 +1,55 @@
+# Post-deployment validation: runs the Pytest smoke suite from the test image
+# INSIDE the cluster against a Service URL. Rendered by scripts/smoke-test.sh.
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __JOB_NAME__
+  namespace: aceest
+  labels:
+    app.kubernetes.io/part-of: aceest
+    role: smoke-test
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 180
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        role: smoke-test
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: pytest
+        image: __TEST_IMAGE__
+        imagePullPolicy: IfNotPresent
+        command:
+        - pytest
+        - -p
+        - no:cacheprovider
+        - -v
+        - tests/smoke
+        env:
+        - name: SMOKE_BASE_URL
+          value: __TARGET_URL__
+        - name: SMOKE_EXPECT_VERSION
+          value: __EXPECT_VERSION__
+        - name: SMOKE_EXPECT_TRACK
+          value: __EXPECT_TRACK__
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
