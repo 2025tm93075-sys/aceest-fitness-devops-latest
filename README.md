@@ -1,342 +1,354 @@
-# ACEest Fitness & Gym — Automated CI/CD Pipeline
+# ACEest Fitness & Gym — End-to-End DevOps CI/CD
 
-[![CI/CD Pipeline](https://github.com/<your-github-username>/aceest-fitness-devops/actions/workflows/main.yml/badge.svg)](https://github.com/<your-github-username>/aceest-fitness-devops/actions/workflows/main.yml)
+[![CI/CD Pipeline](https://github.com/2025tm93075-sys/aceest-fitness-devops-latest/actions/workflows/main.yml/badge.svg)](https://github.com/2025tm93075-sys/aceest-fitness-devops-latest/actions/workflows/main.yml)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![Flask](https://img.shields.io/badge/flask-3.1-black)
+![Kubernetes](https://img.shields.io/badge/kubernetes-minikube-326ce5)
 ![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen)
 
 | | |
 |---|---|
 | **Student** | Bandgar Omkar Sudhakar Sheetal |
 | **Roll No.** | 2025TM93075 |
-| **Course** | Introduction to DevOps (CSIZG514 / SEZG514), S1-26 |
-| **Assignment** | Assignment 1: Implementing Automated CI/CD Pipelines for ACEest Fitness & Gym |
+| **Course** | Introduction to DevOps (CSIZG514 / SEZG514) |
+| **Assignments** | 1: Automated CI/CD pipelines · 2: DevOps CI/CD implementation with Kubernetes deployment strategies |
+| **GitHub** | https://github.com/2025tm93075-sys/aceest-fitness-devops-latest |
+| **Docker Hub** | `https://hub.docker.com/r/<dockerhub-user>/aceest-fitness` |
 
 ACEest Fitness & Gym is a Flask web application for managing gym clients, training programs,
-nutrition targets, workouts and progress. This repository takes it from local development
-through a Jenkins BUILD and quality gate, and a GitHub Actions pipeline that lints, containerises
-and tests every push and pull request.
+nutrition targets, workouts and progress. Every commit is tested, analysed by SonarQube,
+packaged as a Docker image, pushed to Docker Hub and released to Kubernetes with one of five
+progressive deployment strategies. Every strategy reverts automatically to the last stable
+version when a release fails.
 
 ---
 
 ## Table of contents
-1. [Architecture](#1-architecture)
-2. [Application features](#2-application-features)
-3. [Repository layout](#3-repository-layout)
-4. [Local setup and execution](#4-local-setup-and-execution)
-5. [Running the tests manually](#5-running-the-tests-manually)
-6. [Docker](#6-docker)
-7. [Jenkins BUILD and quality gate](#7-jenkins-build-and-quality-gate)
-8. [GitHub Actions CI/CD](#8-github-actions-cicd)
-9. [Version control strategy](#9-version-control-strategy)
-10. [API reference](#10-api-reference)
-11. [From the legacy desktop app to a web service](#11-from-the-legacy-desktop-app-to-a-web-service)
+1. [Assignment 2 deliverables](#1-assignment-2-deliverables)
+2. [Architecture](#2-architecture)
+3. [Application versions](#3-application-versions)
+4. [Repository layout](#4-repository-layout)
+5. [Run locally](#5-run-locally)
+6. [Tests](#6-tests)
+7. [Docker and Docker Hub](#7-docker-and-docker-hub)
+8. [Jenkins and SonarQube setup](#8-jenkins-and-sonarqube-setup)
+9. [Jenkins pipeline](#9-jenkins-pipeline)
+10. [Kubernetes deployment strategies](#10-kubernetes-deployment-strategies)
+11. [Rollback](#11-rollback)
+12. [Public endpoint for submission](#12-public-endpoint-for-submission)
+13. [GitHub Actions](#13-github-actions)
+14. [Version control strategy](#14-version-control-strategy)
+15. [API reference](#15-api-reference)
+16. [Submission checklist](#16-submission-checklist)
 
 ---
 
-## 1. Architecture
+## 1. Assignment 2 deliverables
+
+| Requirement | Where |
+|---|---|
+| Flask application (`ACEest_Fitness.py` and versions) | `ACEest_Fitness.py`, `app.py`, `aceest/`, `templates/`, `static/`; releases tagged `v1.0.0`, `v1.1.0`, `v1.2.0`; original scripts in `legacy/` |
+| Git and GitHub: commits, branches, tags | `feature/*`, `infra/*`, `fix/*` → `develop` → `main`, annotated tags (see [section 14](#14-version-control-strategy)) |
+| Pytest unit tests and automation | `tests/` (unit and integration), `tests/smoke/` (post-deployment) |
+| Jenkins build server with SCM polling | `Jenkinsfile` (`pollSCM('H/2 * * * *')` plus GitHub webhook), `jenkins/` |
+| Build artifacts per version | Jenkins archives `dist/aceest-fitness-<version>-b<build>-{src,k8s}.tar.gz` and `build-info.json` |
+| Docker image, versioned on Docker Hub | `Dockerfile`; tags `vX.Y.Z`, `vX.Y.Z-b<build>`, `latest`; `k8s/scripts/publish-all-versions.sh` |
+| Kubernetes manifests | `k8s/*.yaml` |
+| Rolling update, blue-green, canary, shadow, A/B testing | `k8s/10-…` to `k8s/50-…` and `k8s/scripts/` |
+| Rollback to last stable version | Automatic in every script and in the Jenkins `post { failure }` block; `k8s/scripts/rollback.sh` |
+| Pytest inside containers to validate each deployment | Jenkins "Tests in Containers" stage, plus the `k8s/jobs/smoke-test.yaml` Job run in the cluster after every release |
+| SonarQube static analysis and quality gate | `sonar-project.properties`, Jenkins stages "SonarQube Analysis" and "Quality Gate" |
+
+## 2. Architecture
 
 ```mermaid
 flowchart LR
-    Dev[Developer<br/>feature/* branch] -->|git push / PR| GH[(GitHub repo)]
-    GH -->|push / pull_request| GHA[GitHub Actions<br/>main.yml]
-    GH -->|pollSCM / webhook| JK[Jenkins<br/>Jenkinsfile]
-
-    subgraph GHA_P[GitHub Actions]
-      A1[Build & Lint<br/>compileall + flake8] --> A2[Docker Image Assembly<br/>test + runtime targets]
-      A2 --> A3[Automated Testing<br/>pytest INSIDE container<br/>+ runtime smoke test]
+    Dev[Developer<br/>feature branch] -->|push| GH[(GitHub)]
+    GH -->|pollSCM / webhook| J[Jenkins]
+    subgraph Jenkins pipeline
+      J --> T[Build & unit tests<br/>flake8 + pytest + coverage]
+      T --> SQ[SonarQube analysis]
+      SQ --> QG{Quality gate}
+      QG -->|pass| DB[Docker build<br/>runtime + test images]
+      DB --> CT[Pytest in containers]
+      CT --> PUSH[Push to Docker Hub]
+      PUSH --> ART[Archive artifacts]
+      ART --> DEP[Deploy strategy]
     end
-
-    subgraph JK_P[Jenkins BUILD]
-      J1[Checkout] --> J2[Clean venv build] --> J3[Lint] --> J4[Pytest + coverage gate]
-      J4 --> J5[Docker build] --> J6[Container tests]
+    PUSH --> HUB[(Docker Hub<br/>aceest-fitness:vX.Y.Z)]
+    DEP --> K8S
+    HUB --> K8S
+    subgraph K8S[Minikube / Kubernetes - namespace aceest]
+      R[Rolling]:::s
+      BG[Blue-Green]:::s
+      C[Canary]:::s
+      AB[A/B]:::s
+      SH[Shadow]:::s
+      SM[Smoke-test Job]
     end
-
-    GHA --> GHA_P
-    JK --> JK_P
+    DEP -.failure.-> RB[Automatic rollback]
+    classDef s fill:#d4af37,color:#000
 ```
 
-**Application layers**
+Traffic reaches the cluster through the NGINX ingress controller (canary weights, A/B
+header and cookie routing, request mirroring for shadow) and through NodePorts for the
+rolling and blue-green environments.
 
-| Layer | File | Responsibility |
+## 3. Application versions
+
+| Tag | Main changes | Docker Hub image |
 |---|---|---|
-| Web / API | `app.py` | Flask app factory, routes, JSON error handling, HTML pages |
-| Domain logic | `aceest/fitness.py` | Calories, BMI, adherence, membership and program generator (pure Python, no I/O) |
-| Persistence | `aceest/database.py` | SQLite schema, per-request connections, admin seeding with hashed password |
-| UI | `templates/`, `static/` | Server-rendered dashboard and client pages |
+| `v1.0.0` | Flask rewrite of the Tkinter app: clients, programs, calories, BMI, progress, workouts, metrics, auth | `aceest-fitness:v1.0.0` |
+| `v1.1.0` | Kubernetes-ready: `/ready` probe, deployment metadata (`X-App-Version`, `X-Deployment-Track`, `X-Pod` headers and page banner), fault injection for rollback drills, `ACEest_Fitness.py` entry point, OCI image labels | `aceest-fitness:v1.1.0` |
+| `v1.2.0` | One-rep max estimator (API and `/tools` page), variant B dashboard promo for A/B testing, generated secrets instead of hard-coded defaults, Kubernetes manifests, SonarQube and the CD pipeline | `aceest-fitness:v1.2.0` |
 
-Keeping the business rules in a module with no Flask or database imports means they can be
-unit-tested in isolation, while the API is tested end to end with Flask's test client.
+The version lives in `aceest/__init__.py`; Jenkins reads it to tag images and artifacts.
 
-## 2. Application features
-
-- **Program catalogue**: Fat Loss (3-day and 5-day), Muscle Gain (PPL) and Beginner, each with a weekly workout plan, a diet plan and a calorie factor.
-- **Calorie target**: body weight (kg) × program factor, recalculated automatically whenever weight or program changes.
-- **BMI and risk**: WHO categories (Underweight, Normal, Overweight, Obese) with a coaching risk note.
-- **Client management**: full CRUD with validation; duplicate names return `409 Conflict`.
-- **Weekly adherence tracking**: 0–100 %, summarised as average, best and latest.
-- **Workout logging**: types Strength, Hypertrophy, Cardio and Mobility, with nested exercises and total training volume (sets × reps × weight).
-- **Body metrics**: weight, waist and body-fat history.
-- **Membership status**: Active, Expiring Soon (7 days or fewer), Expired or No Membership, with days remaining.
-- **Program generator**: suggests a training split, optionally for a chosen goal.
-- **Authentication endpoint**: role-based users; passwords stored as salted hashes (Werkzeug).
-- **Ops endpoints**: `/health` (also used by the Docker `HEALTHCHECK`) and `/api/version`.
-- **Web dashboard**: site metrics, add-client form, client list, program cards and a per-client page with BMI, adherence bars and workout history.
-
-## 3. Repository layout
+## 4. Repository layout
 
 ```
-aceest-fitness-devops/
-├── app.py                     # Flask application (factory + routes)
-├── aceest/
-│   ├── __init__.py            # package version
-│   ├── fitness.py             # business rules (pure functions)
-│   └── database.py            # SQLite schema & connection handling
-├── templates/                 # Jinja2 pages (base, index, client)
-├── static/style.css
-├── tests/
-│   ├── conftest.py            # fixtures: isolated app + temp DB per test
-│   ├── test_fitness.py        # unit tests for business logic
-│   └── test_api.py            # API, validation, HTML and auth tests
-├── requirements.txt           # runtime deps (pinned)
-├── requirements-dev.txt       # + pytest, pytest-cov, flake8
-├── Dockerfile                 # multi-stage: builder → test → runtime
-├── .dockerignore
-├── docker-compose.yml         # one-command local run
-├── Jenkinsfile                # Jenkins declarative pipeline
-├── jenkins/                   # Jenkins-in-Docker for the lab (python3 + docker CLI)
-├── .github/workflows/main.yml # GitHub Actions pipeline
-├── .flake8 / pytest.ini       # tool configuration
-└── legacy/                    # original Tkinter versions v1.0 → v3.2.4 (reference only)
+├── ACEest_Fitness.py          # WSGI entry point (gunicorn ACEest_Fitness:app)
+├── app.py                     # Flask app factory and routes
+├── aceest/                    # fitness logic, database, deployment metadata, secrets
+├── templates/ static/         # dashboard, client page, tools page
+├── tests/                     # unit and integration tests (Flask test client)
+│   └── smoke/                 # post-deployment tests against a live URL
+├── Dockerfile                 # builder → test → runtime (non-root, healthcheck)
+├── Jenkinsfile                # CI/CD pipeline
+├── sonar-project.properties   # SonarQube configuration
+├── jenkins/                   # Jenkins + SonarQube stack, plugins, kubeconfig helper
+├── k8s/
+│   ├── 00-namespace.yaml
+│   ├── 10-rolling-update.yaml
+│   ├── 20-blue-green.yaml
+│   ├── 30-canary.yaml
+│   ├── 40-ab-testing.yaml
+│   ├── 50-shadow.yaml
+│   ├── jobs/smoke-test.yaml   # Pytest smoke suite as a Kubernetes Job
+│   └── scripts/               # bootstrap, release, rollback, status, traffic checks
+├── .github/workflows/main.yml # GitHub Actions (Assignment 1)
+└── legacy/                    # original Tkinter versions v1.0 → v3.2.4
 ```
 
-## 4. Local setup and execution
-
-**Prerequisites:** Python 3.10 or newer (3.12 recommended), Git, and optionally Docker.
+## 5. Run locally
 
 ```bash
-# 1. Clone
-git clone https://github.com/<your-github-username>/aceest-fitness-devops.git
-cd aceest-fitness-devops
-
-# 2. Create and activate a virtual environment
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-
-# 3. Install dependencies
+git clone https://github.com/2025tm93075-sys/aceest-fitness-devops-latest.git
+cd aceest-fitness-devops-latest
+python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt
-
-# 4. Run the development server
-python app.py
-# → http://127.0.0.1:5000
+python ACEest_Fitness.py                               # http://127.0.0.1:5000
 ```
-
-Production-style run with Gunicorn (Linux/macOS):
-
-```bash
-gunicorn --bind 0.0.0.0:5000 --workers 2 "app:create_app()"
-```
-
-**Configuration** (environment variables):
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DATABASE_PATH` | `instance/aceest_fitness.db` | SQLite file location |
-| `SECRET_KEY` | `dev-only-change-me` | Flask session signing; **set this in production** |
-| `ADMIN_USER` / `ADMIN_PASSWORD` | `admin` / `admin` | Seeded admin account (first start only) |
-| `HOST` / `PORT` / `FLASK_DEBUG` | `127.0.0.1` / `5000` / off | Dev server only |
+| `DATABASE_PATH` | `instance/aceest_fitness.db` | SQLite file |
+| `SECRET_KEY`, `ADMIN_PASSWORD` | generated once into the instance folder | Session signing and admin login; Kubernetes injects them from a Secret |
+| `ADMIN_USER` | `admin` | Seeded admin account |
+| `DEPLOYMENT_TRACK` | `local` | Shown in the banner, `X-Deployment-Track` and `/api/version` |
+| `UI_VARIANT` | `A` | `B` shows the one-rep max promo (A/B test) |
+| `FAULT_INJECTION` | unset | `health` makes `/health` and `/ready` return 503 (rollback drill) |
 
-Quick API check:
+## 6. Tests
 
 ```bash
-curl http://127.0.0.1:5000/health
-curl -X POST http://127.0.0.1:5000/api/clients \
-     -H "Content-Type: application/json" \
-     -d '{"name":"Arjun","age":30,"height":180,"weight":80,"program":"fat-loss-3day","membership_end":"2026-12-31"}'
-curl http://127.0.0.1:5000/api/clients/1/summary
+pytest                                             # 134 pass; the 7 smoke tests skip without a URL
+pytest --cov=app --cov=aceest --cov-report=term    # about 99% coverage
+flake8 app.py ACEest_Fitness.py aceest tests
+
+# Smoke suite against any running instance
+SMOKE_BASE_URL=http://127.0.0.1:5000 SMOKE_EXPECT_VERSION=1.2.0 pytest tests/smoke
 ```
 
-## 5. Running the tests manually
+| Level | Runs where | What it proves |
+|---|---|---|
+| Unit and integration (`tests/`) | Jenkins workspace and inside the test image | Business rules, API, validation, UI, auth, deployment metadata, secrets |
+| Container smoke (`tests/smoke`) | Test container calling the runtime container on a Docker network | The image that will be shipped starts, serves the right version and runs as UID 10001 |
+| Cluster smoke (`k8s/jobs/smoke-test.yaml`) | Kubernetes Job inside the cluster, after every release step | The Service being promoted answers with the expected version and track; failure triggers rollback |
 
-```bash
-source .venv/bin/activate
+## 7. Docker and Docker Hub
 
-pytest                                   # all 93 tests
-pytest -v tests/test_fitness.py          # business-logic unit tests only
-pytest -k membership                     # filter by keyword
-pytest --cov=app --cov=aceest --cov-report=term-missing   # with coverage (~99%)
-flake8 app.py aceest tests               # lint
+Multi-stage `Dockerfile`: `builder` (venv with runtime deps) → `test` (adds pytest and the
+tests) → `runtime` (python:3.12-slim, non-root UID 10001, Gunicorn, `HEALTHCHECK`, OCI labels
+with version and commit). Podman builds it unchanged (`podman build .`).
+
+Images pushed by Jenkins for every build:
+
+```
+docker.io/<dockerhub-user>/aceest-fitness:v1.2.0         # release
+docker.io/<dockerhub-user>/aceest-fitness:v1.2.0-b17     # exact build
+docker.io/<dockerhub-user>/aceest-fitness:latest
+docker.io/<dockerhub-user>/aceest-fitness-test:v1.2.0    # test image used by the smoke Job
 ```
 
-Run the same suite inside the container, exactly as CI does:
+To publish **every** tagged version (v1.0.0, v1.1.0, v1.2.0) in one go:
 
 ```bash
-docker build --target test -t aceest-fitness:test .
-docker run --rm aceest-fitness:test
+docker login
+IMAGE_REPO=docker.io/<dockerhub-user>/aceest-fitness k8s/scripts/publish-all-versions.sh
 ```
 
-**What is covered**
+## 8. Jenkins and SonarQube setup
 
-| Area | Examples |
-|---|---|
-| Calculations | calorie factors for every program, BMI value and category boundaries (18.5 / 25 / 30) |
-| Validation | negative or non-numeric input, unknown programs, bad dates, adherence outside 0–100, non-JSON bodies |
-| CRUD | create, read, update with calorie recalculation, delete with cascade, `404`, `409` duplicates |
-| Tracking | progress, workouts with nested exercises, body metrics, summary aggregation |
-| Security | login success and failure, password stored as a hash |
-| UI | dashboard and client pages render; form create, validation and duplicate messages |
-
-Each test gets its own temporary SQLite database (`tmp_path` fixture), so tests are isolated and can run in any order.
-
-## 6. Docker
-
-The `Dockerfile` is a **multi-stage build**:
-
-| Stage | Purpose |
-|---|---|
-| `builder` | Creates `/opt/venv` and installs only runtime dependencies. `requirements.txt` is copied before the source so this layer stays cached when only code changes. |
-| `test` | `builder` plus dev tools and `tests/`. CI and Jenkins run Pytest here. |
-| `runtime` (default) | `python:3.12-slim`, copies only the venv and the app code. No compilers, tests or pip cache. |
-
-Size and security choices:
-- Slim base image, `PIP_NO_CACHE_DIR`, no bytecode files, and a strict `.dockerignore` (no `.git`, tests, legacy code or local DBs in the context).
-- Runs as **non-root user `aceest` (UID 10001)**. Application files are owned by root and read-only to that user; only `/app/instance` (the data volume) is writable.
-- Gunicorn instead of the Flask dev server; a `HEALTHCHECK` on `/health`.
-- Secrets are supplied through environment variables, never baked into the image.
-- The Dockerfile passes `hadolint` with no warnings.
+Prerequisites: Docker, Minikube, kubectl, and a Docker Hub account with an
+[access token](https://hub.docker.com/settings/security).
 
 ```bash
-docker build -t aceest-fitness:latest .
-docker run -d -p 5000:5000 -v aceest_data:/app/instance --name aceest aceest-fitness:latest
-docker ps                 # STATUS shows (healthy) after start-up
-# or simply:
-docker compose up --build
-```
+# 1. Cluster (creates the "minikube" Docker network that Jenkins joins)
+k8s/scripts/minikube-up.sh
 
-## 7. Jenkins BUILD and quality gate
-
-Jenkins is the second validation layer: it pulls the latest code from GitHub and performs a
-**clean build** in a controlled environment, so the code is checked independently of a
-developer's machine and of GitHub's runners.
-
-### Setup (lab)
-
-```bash
+# 2. Jenkins + SonarQube + PostgreSQL
+sudo sysctl -w vm.max_map_count=524288        # Linux only, required by SonarQube
 docker compose -f jenkins/docker-compose.yml up -d --build
 docker exec aceest-jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+
+# 3. Kubeconfig that works from inside the Jenkins container
+jenkins/make-kubeconfig.sh                    # writes jenkins/kubeconfig-minikube.yaml (git-ignored)
 ```
 
-1. Open `http://localhost:8080`, unlock Jenkins and install the suggested plugins (these include Pipeline, Git and JUnit).
-2. **New Item → Pipeline** and name it `aceest-fitness-build`.
-3. Under *Pipeline*, choose **Pipeline script from SCM**, set SCM to **Git**, enter the repository URL, use branch `*/main` and script path `Jenkinsfile`.
-4. Save, then click **Build Now**. Later builds start automatically through `pollSCM` (every ~5 minutes). For instant builds, add a GitHub webhook to `http://<jenkins-host>/github-webhook/` and tick *GitHub hook trigger for GITScm polling*.
+**SonarQube** (http://localhost:9000, first login admin/admin):
+1. *My Account → Security*: generate a **global analysis token**.
+2. *Administration → Configuration → Webhooks*: add `http://aceest-jenkins:8080/sonarqube-webhook/` (lets Jenkins wait for the quality gate).
 
-### Pipeline logic (`Jenkinsfile`)
+**Jenkins** (http://localhost:8080; the plugins in `jenkins/plugins.txt` are pre-installed):
+1. *Manage Jenkins → Credentials → Global*, add:
+   - `dockerhub-creds`: Username with password (Docker Hub user and access token)
+   - `minikube-kubeconfig`: Secret file (`jenkins/kubeconfig-minikube.yaml`)
+   - `sonar-token`: Secret text (the SonarQube token)
+2. *Manage Jenkins → System → SonarQube servers*: name **`SonarQube`**, URL `http://aceest-sonarqube:9000`, token `sonar-token`.
+3. *Manage Jenkins → Tools → SonarQube Scanner installations*: name **`SonarScanner`**, install automatically.
+4. *New Item → Pipeline* `aceest-fitness-cicd`: *Pipeline script from SCM*, Git, `https://github.com/2025tm93075-sys/aceest-fitness-devops-latest.git`, branch `*/main`, script path `Jenkinsfile`.
+5. In the `Jenkinsfile`, set `DOCKERHUB_USER` to your Docker Hub username and push.
+6. Click **Build Now** once (Jenkins reads the parameters and the polling trigger). From then on, every push to `main` is picked up within two minutes. For instant builds, add a GitHub webhook to `http://<public-jenkins-url>/github-webhook/`.
 
-| Stage | What it does | Fails the build when |
+## 9. Jenkins pipeline
+
+| # | Stage | What happens | Stops the pipeline when |
+|---|---|---|---|
+| 1 | Checkout | Pulls the commit, reads the version, names the build `#N vX.Y.Z (sha)` | `DOCKERHUB_USER` is not set |
+| 2 | Build & Unit Tests | Clean venv, compileall, flake8 (report for Sonar), Pytest with JUnit and coverage XML | A lint error, a failing test, or coverage below 90% |
+| 3 | SonarQube Analysis | `sonar-scanner` with coverage, test and flake8 reports | Scanner error |
+| 4 | Quality Gate | Waits for the SonarQube webhook | The gate fails |
+| 5 | Docker Build | Runtime image (`vX.Y.Z`, `vX.Y.Z-bN`, `latest`) and test image | Build error |
+| 6 | Tests in Containers | Full suite inside the test image; smoke suite from the test container against the runtime container; checks non-root UID | Any test fails |
+| 7 | Push to Docker Hub | Pushes all tags of both images | Login or push fails |
+| 8 | Build Artifacts | Source tarball, manifests tarball, `build-info.json` with image digest, all fingerprinted | — |
+| 9 | Deploy to Kubernetes | Bootstraps all strategies on first run, then releases with `DEPLOY_STRATEGY` | Rollout or in-cluster smoke test fails → **automatic rollback** |
+
+Build parameters: `DEPLOY_STRATEGY` (`rolling` by default for polled builds, or `blue-green`,
+`canary`, `ab-test`, `shadow`, `all`, `none`), `CANARY_WEIGHT`, `PROMOTE`, `SIMULATE_FAILURE`
+(rollback drill), `PUSH_IMAGES`.
+
+## 10. Kubernetes deployment strategies
+
+```bash
+export IMAGE_REPO=docker.io/<dockerhub-user>/aceest-fitness
+STABLE_TAG=v1.1.0 NEW_TAG=v1.2.0 k8s/scripts/bootstrap.sh    # all five strategies
+k8s/scripts/status.sh
+```
+
+Add the hosts line printed by `minikube-up.sh` (`<minikube-ip> rolling.aceest.local …`) to
+`/etc/hosts`.
+
+| Strategy | Endpoint | Release | Rollback |
+|---|---|---|---|
+| **Rolling update** | `http://<minikube-ip>:30080` · `rolling.aceest.local` | `rolling-update.sh v1.2.0` | automatic; or `rollback.sh rolling` |
+| **Blue-green** | live `:30081` · preview `:30082` · `bluegreen.aceest.local` | `blue-green.sh deploy v1.2.0` | `blue-green.sh rollback` (instant) |
+| **Canary** | `canary.aceest.local` | `canary.sh start v1.2.0 20` → `canary.sh weight 50` → `canary.sh promote` | `canary.sh abort` |
+| **A/B testing** | `ab.aceest.local` | `ab-test.sh deploy v1.2.0` → `ab-test.sh split 50` → `ab-test.sh results` | `ab-test.sh end` |
+| **Shadow** | `shadow.aceest.local` | `shadow.sh deploy v1.2.0` → `shadow.sh compare` → `shadow.sh promote` | `shadow.sh stop` |
+
+How each one works:
+
+- **Rolling update:** 3 replicas, `maxSurge: 1`, `maxUnavailable: 0`, plus a PodDisruptionBudget. A new pod gets traffic only after `/ready` passes, so capacity never drops.
+- **Blue-green:** `aceest-blue` and `aceest-green` run side by side. The live Service selects `slot: blue|green` and the preview Service exposes the idle slot. The new version goes to the idle slot, is smoke-tested through the preview Service, then the live selector is switched in one API call. The previous slot is recorded, so rollback is one more switch.
+- **Canary:** stable (3 replicas) and canary (1 replica). An NGINX canary ingress sends `canary-weight`% of requests to the canary. The header `X-Canary: always` forces the canary for QA.
+- **A/B testing:** two deployments of the same release with `UI_VARIANT=A` and `B`. New visitors are split 50/50. The cookie `ab_variant=always` or the header `X-Variant: B` pins a user to variant B. `ab-test.sh results` compares promo clicks per variant from the access logs.
+- **Shadow:** users are served only by production. The ingress `mirror-target` copies every request to the shadow release and discards its response. `shadow.sh compare` shows requests and 5xx counts for both.
+
+See the split with your own eyes:
+
+```bash
+k8s/scripts/traffic-check.sh canary.aceest.local 100           # ~80 x v1.1.0 (stable), ~20 x v1.2.0 (canary)
+k8s/scripts/traffic-check.sh ab.aceest.local 20 -H "X-Variant: B"
+curl -sI -H "Host: bluegreen.aceest.local" http://$(minikube ip)/ | grep X-
+```
+
+## 11. Rollback
+
+| Failure | What happens |
+|---|---|
+| New pods never become ready (crash, bad image, failing `/ready`) | `kubectl rollout status` times out → `rollout undo --to-revision=<last stable>`; old pods kept serving the whole time |
+| Release is up but the in-cluster smoke Job fails | The script reverts the deployment (rolling, canary promote, shadow promote), keeps the old slot live (blue-green), or sets the weight back to 0 (canary, A/B) |
+| Any later pipeline stage fails | Jenkins `post { failure }` runs `k8s/scripts/rollback.sh <strategy>` |
+| Manual | `k8s/scripts/rollback.sh <rolling\|blue-green\|canary\|ab-test\|shadow\|all>` or `kubectl -n aceest rollout undo deployment/<name>` |
+
+**Rollback drill** (good for a demo screenshot): run the Jenkins job with `SIMULATE_FAILURE=true`,
+or locally `FAULT_INJECTION=health k8s/scripts/rolling-update.sh v1.2.0`. The new pods report
+503, never become ready, users keep being served by the old pods, and the deployment returns
+to the stable revision. `kubectl -n aceest rollout history deployment/aceest-rolling` shows it.
+
+## 12. Public endpoint for submission
+
+Minikube runs on your machine, so its IP is not reachable from outside. Options:
+
+1. **Tunnel the ingress** (simplest): `minikube tunnel`, then
+   `cloudflared tunnel --url http://localhost:80 --http-host-header canary.aceest.local`
+   (or `ngrok http 80 --host-header=canary.aceest.local`). Repeat per host you want to share.
+2. **Cloud cluster:** the same manifests run unchanged on EKS, AKS or GKE after installing
+   ingress-nginx. Point a DNS name (or the load balancer hostname) at the ingress and replace
+   `*.aceest.local` in `k8s/*.yaml`.
+
+## 13. GitHub Actions
+
+`.github/workflows/main.yml` (from Assignment 1) still runs on every push and pull request:
+Build & Lint → Docker image assembly → Pytest inside the container and a runtime smoke test.
+It gives fast feedback on branches, while Jenkins owns the release path.
+
+## 14. Version control strategy
+
+| Branch | Purpose | Examples |
 |---|---|---|
-| Checkout | `checkout scm` pulls the commit from GitHub | repository is unreachable |
-| Clean Build Environment | deletes and recreates `.venv`, installs pinned deps, `compileall` | a dependency or syntax error |
-| Lint | `flake8` | any style or logic warning |
-| Unit Tests | Pytest with JUnit XML and coverage; **gate: coverage of at least 90 %** | a failing test or coverage below 90 % |
-| Docker Build | builds the `test` and `runtime` images, tagged with `BUILD_NUMBER` | Dockerfile errors |
-| Container Tests | runs Pytest inside the image, starts the runtime container and checks `/health` | the container is unhealthy |
+| `main` | Released code, annotated tags | `v1.0.0`, `v1.1.0`, `v1.2.0` |
+| `develop` | Integration | |
+| `feature/*` | Application features | `feature/k8s-ready-app`, `feature/one-rep-max`, `feature/ab-variant` |
+| `infra/*` | Pipeline and platform | `infra/kubernetes`, `infra/sonarqube-jenkins-cd` |
+| `fix/*` | Bug and security fixes | `fix/admin-seed-race`, `fix/sonar-security-hotspots` |
 
-Post-build: JUnit results are published to the Jenkins test-trend graph, reports are archived,
-old builds are rotated, concurrent builds are disabled, and a 20-minute timeout applies.
+Merges use `--no-ff`; commit messages follow Conventional Commits (`feat`, `fix`, `test`,
+`ci`, `build`, `docs`, `chore`). View the history with `git log --oneline --graph --all`.
 
-## 8. GitHub Actions CI/CD
-
-Workflow: `.github/workflows/main.yml`, triggered on **every `push`** (all branches), on
-**`pull_request`** into `main`/`develop`, and manually through `workflow_dispatch`.
-
-```
-build-lint ──► docker-build ──► docker-test
-```
-
-| Job | Steps |
-|---|---|
-| **Build & Lint** | checkout → Python 3.12 (pip cache) → install deps → `python -m compileall` (syntax check) → `flake8` → confirm the app factory boots |
-| **Docker Image Assembly** | build the `test` and `runtime` targets → tag with the commit SHA → hand the images to the next job as an artifact |
-| **Automated Testing** | load the images → **run Pytest inside the container** (JUnit and coverage XML, coverage of at least 90 %) → start the runtime container, poll `/health`, call `/api/programs`, assert it runs as non-root → upload test reports |
-
-Other details: least-privilege `permissions: contents: read`, and `concurrency` cancels stale runs
-on the same branch. Each job depends on the previous one, so a lint failure stops the pipeline
-before any image is built.
-
-**How the two tools fit together:** GitHub Actions gives fast feedback on every push and PR,
-and its status check can be required before merging into `main`. Jenkins runs the same quality
-gates in a self-managed build environment, which is the controlled BUILD phase the assignment
-asks for. Both use the same `requirements-dev.txt`, `flake8` config, test suite and Dockerfile
-targets, so a build that is green in one is green in the other.
-
-## 9. Version control strategy
-
-**Branching (Git Flow, simplified)**
-
-| Branch | Purpose |
-|---|---|
-| `main` | Released, deployable code; tagged releases (`v1.0.0`) |
-| `develop` | Integration branch for completed features |
-| `feature/*` | New functionality, e.g. `feature/flask-app`, `feature/test-suite` |
-| `infra/*` | Docker and CI/CD changes, e.g. `infra/docker`, `infra/ci-cd` |
-| `fix/*` | Bug fixes, e.g. `fix/admin-seed-race` |
-
-Feature branches are merged into `develop` with `--no-ff`, so each feature stays visible as a
-unit in history. `develop` is merged into `main` for a release and tagged.
-
-**Commit messages** follow [Conventional Commits](https://www.conventionalcommits.org/):
-`feat:`, `fix:`, `test:`, `build:`, `ci:`, `docs:`, `chore:`, `refactor:`, for example:
-
-```
-feat(api): add client CRUD with calorie recalculation
-fix(db): make admin seeding safe for concurrent gunicorn workers
-ci: add GitHub Actions pipeline with in-container pytest
-```
-
-View the history with `git log --oneline --graph --all`.
-
-## 10. API reference
+## 15. API reference
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/` | Web dashboard |
-| GET | `/clients/<id>` | Client detail page |
-| POST | `/clients` | Add a client (HTML form) |
-| GET | `/health` | Liveness and DB check |
-| GET | `/api/version` | App version |
-| GET | `/api/programs` · `/api/programs/<id>` | Program catalogue |
-| POST | `/api/calculate/calories` | `{weight, program}` → kcal/day |
-| POST | `/api/calculate/bmi` | `{weight, height}` → BMI, category, risk |
-| POST | `/api/auth/login` | `{username, password}` → role |
-| GET / POST | `/api/clients` | List or create clients |
-| GET / PUT / DELETE | `/api/clients/<id>` | Read, update or delete a client |
-| GET | `/api/clients/<id>/summary` | BMI, adherence stats, membership, workout count |
-| POST | `/api/clients/<id>/generate-program` | Optional `{goal}` → suggested split |
-| GET / POST | `/api/clients/<id>/progress` | Weekly adherence |
-| GET / POST | `/api/clients/<id>/workouts` | Workouts with nested `exercises` |
-| GET / POST | `/api/clients/<id>/metrics` | Body metrics |
+| GET | `/` · `/clients/<id>` · `/tools` | Dashboard, client page, strength tools |
+| GET | `/health` · `/ready` | Liveness and readiness probes |
+| GET | `/api/version` | Version, track, UI variant and pod |
+| GET | `/api/programs[/<id>]` | Program catalogue |
+| POST | `/api/calculate/calories` · `/bmi` · `/one-rep-max` | Calculators |
+| POST | `/api/auth/login` | Credential check |
+| GET/POST | `/api/clients` | List or create clients |
+| GET/PUT/DELETE | `/api/clients/<id>` | Read, update or delete a client |
+| GET | `/api/clients/<id>/summary` | BMI, adherence, membership |
+| GET/POST | `/api/clients/<id>/progress` · `/workouts` · `/metrics` | Tracking |
+| POST | `/api/clients/<id>/generate-program` | Suggested split |
 
-Errors are always JSON: `400` validation, `401` bad credentials, `404` not found, `409` duplicate.
+Every response carries `X-App-Version`, `X-Deployment-Track`, `X-UI-Variant` and `X-Pod`.
 
-Program IDs: `fat-loss-3day`, `fat-loss-5day`, `muscle-gain-ppl`, `beginner`.
+> Each pod keeps its own SQLite database (an `emptyDir` volume), which is enough to demonstrate
+> the strategies. A production rollout would move client data to a shared database such as
+> PostgreSQL so all replicas see the same records.
 
-## 11. From the legacy desktop app to a web service
+## 16. Submission checklist
 
-The baseline code was a series of Tkinter desktop scripts (kept unchanged in `legacy/`).
-Their logic was consolidated into the Flask service:
-
-| Legacy version | Feature carried forward |
-|---|---|
-| v1.0 | Program catalogue (workout and diet plans), site metrics |
-| v1.1 / v1.1.2 | Calorie factor per program |
-| v2.0.1 – v2.2.1 | SQLite clients and weekly adherence tracking |
-| v2.2.4 / v3.0.1 | Workouts, exercises, body metrics, BMI and risk, extra program variants |
-| v3.1.2 / v3.2.4 | Users and roles, membership status, program generator |
-
-Improvements over the legacy code: a headless HTTP API instead of a GUI (so it can be
-containerised and tested), hashed passwords instead of plain text, input validation, foreign
-keys with cascade deletes, and business logic separated from I/O so it can be tested.
+- [ ] Set `DOCKERHUB_USER` in `Jenkinsfile` and push to `main`
+- [ ] Run `publish-all-versions.sh` so Docker Hub has `v1.0.0`, `v1.1.0`, `v1.2.0`
+- [ ] Jenkins: green runs for recent commits (Stage View screenshot), artifacts archived
+- [ ] SonarQube: project dashboard showing the quality gate passed (screenshot or PDF export)
+- [ ] Cluster: `k8s/scripts/status.sh` output and the `traffic-check.sh` results for each strategy
+- [ ] Rollback drill screenshot (`SIMULATE_FAILURE=true` build)
+- [ ] Public endpoint URL(s) from [section 12](#12-public-endpoint-for-submission)
 
 ---
 
