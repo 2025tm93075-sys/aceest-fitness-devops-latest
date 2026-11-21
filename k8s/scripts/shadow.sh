@@ -30,7 +30,7 @@ case "${1:-compare}" in
     TAG="$(current_tag aceest-shadow)"
     set_image aceest-production "$TAG"
     rollout_or_undo aceest-production || exit 1
-    smoke "http://aceest-production" "$TAG" production || { fail "Promotion failed - reverting production"; k rollout undo deployment/aceest-production; exit 1; }
+    smoke "http://aceest-production" "$TAG" production || { fail "Promotion failed - reverting production"; undo aceest-production; exit 1; }
     ok "Production now runs $TAG"
     ;;
   stop|rollback)

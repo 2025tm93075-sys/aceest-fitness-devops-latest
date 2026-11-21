@@ -32,7 +32,7 @@ case "${1:-status}" in
     log "Promoting canary $TAG to stable"
     set_image aceest-stable "$TAG"
     rollout_or_undo aceest-stable || exit 1
-    smoke "http://aceest-stable" "$TAG" stable || { fail "Promotion failed - reverting stable"; k rollout undo deployment/aceest-stable; exit 1; }
+    smoke "http://aceest-stable" "$TAG" stable || { fail "Promotion failed - reverting stable"; undo aceest-stable; exit 1; }
     set_weight 0
     ok "Stable now runs $TAG"
     ;;
