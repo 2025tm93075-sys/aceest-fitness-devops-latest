@@ -35,5 +35,9 @@ ul { margin:0; padding-left:18px; }
 .bar-row { display:grid; grid-template-columns:120px 1fr 48px; gap:10px; align-items:center; margin-bottom:6px; font-size:13px; }
 .bar { background:#111; height:10px; border-radius:5px; overflow:hidden; }
 .bar i { display:block; height:100%; background:var(--gold); }
+.promo { display:flex; justify-content:space-between; align-items:center; gap:16px; background:linear-gradient(90deg,#3a3010,#242424); border:1px solid var(--gold); border-radius:6px; padding:16px 20px; margin-bottom:20px; }
+.promo b { display:block; color:var(--gold); font-size:17px; }
+.promo span { color:var(--muted); }
+.cta { background:var(--gold); color:#000; font-weight:700; padding:10px 18px; border-radius:4px; text-decoration:none; white-space:nowrap; }
 footer { text-align:center; color:var(--muted); font-size:12px; padding:24px 16px; }
 @media (max-width: 760px) { .grid { grid-template-columns:1fr; } }

@@ -1,5 +1,14 @@
 {% extends "base.html" %}
 {% block content %}
+{% if deploy.variant == "B" %}
+<section class="promo" data-variant="B">
+  <div>
+    <b>New: one-rep max estimator</b>
+    <span>Turn any set into an estimated max and get working weights for strength, size or endurance.</span>
+  </div>
+  <a class="cta" href="{{ url_for('tools', ref='variant-b') }}">Try it now</a>
+</section>
+{% endif %}
 <section class="metrics">
   <div><b>{{ metrics.capacity_users }}</b><small>Capacity (users)</small></div>
   <div><b>{{ "{:,}".format(metrics.area_sq_ft) }}</b><small>Area (sq ft)</small></div>
