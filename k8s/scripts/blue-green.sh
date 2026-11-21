@@ -44,7 +44,7 @@ case "${1:-status}" in
     rollout_or_undo "aceest-$IDLE" || exit 1
     if ! smoke "http://aceest-bluegreen-preview" "$TAG" "$IDLE"; then
       fail "Idle slot $IDLE failed smoke tests - live traffic untouched; reverting $IDLE"
-      k rollout undo "deployment/aceest-$IDLE"
+      undo "aceest-$IDLE"
       k rollout status "deployment/aceest-$IDLE" --timeout="$ROLLOUT_TIMEOUT" || true
       exit 1
     fi

@@ -19,3 +19,7 @@ docs
 Jenkinsfile
 docker-compose.yml
 *.md
+k8s
+sonar-project.properties
+dist
+.scannerwork

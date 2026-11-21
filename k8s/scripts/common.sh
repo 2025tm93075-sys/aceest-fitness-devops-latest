@@ -35,14 +35,29 @@ render() {
       -e "s#__NEW_TAG__#${NEW_TAG:-v1.2.0}#g" "$file"
 }
 
+revision() { k get deployment "$1" -o jsonpath='{.metadata.annotations.deployment\.kubernetes\.io/revision}'; }
+
+# Remember the last stable revision of a Deployment before changing it.
+mark_stable() { STABLE_REVISION="$(revision "$1")"; export STABLE_REVISION; }
+
+# Revert to the remembered stable revision (or the previous one if unknown).
+undo() {
+  local deploy="$1"
+  if [[ -n "${STABLE_REVISION:-}" ]]; then
+    k rollout undo "deployment/${deploy}" --to-revision="$STABLE_REVISION"
+  else
+    k rollout undo "deployment/${deploy}"
+  fi
+}
+
 # Wait for a Deployment to finish rolling out; on timeout undo it.
 rollout_or_undo() {
   local deploy="$1"
   if k rollout status "deployment/${deploy}" --timeout="$ROLLOUT_TIMEOUT"; then
     ok "deployment/${deploy} rolled out"
   else
-    fail "deployment/${deploy} did not become ready - rolling back"
-    k rollout undo "deployment/${deploy}"
+    fail "deployment/${deploy} did not become ready - rolling back to revision ${STABLE_REVISION:-previous}"
+    undo "${deploy}"
     k rollout status "deployment/${deploy}" --timeout="$ROLLOUT_TIMEOUT" || true
     return 1
   fi
@@ -51,6 +66,7 @@ rollout_or_undo() {
 # Point a Deployment at a new image and record why (shows in rollout history).
 set_image() {
   local deploy="$1" tag="$2"
+  mark_stable "$deploy"
   k set image "deployment/${deploy}" "web=${IMAGE_REPO}:${tag}"
   k annotate "deployment/${deploy}" kubernetes.io/change-cause="deploy ${tag} (build ${BUILD_NUMBER:-manual})" --overwrite
 }
